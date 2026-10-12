@@ -19,7 +19,7 @@
       ],
       "id": "a5e817dd-019f-4c8c-a0e2-1cd5ee415308",
       "name": "Whatsapp Webhook",
-      "webhookId": "ad920242-3468-483d-808d-1e3156ed3e80"
+      "webhookId": ""
     },
     {
       "parameters": {
@@ -130,7 +130,7 @@
       "name": "Save Incoming Message",
       "credentials": {
         "supabaseApi": {
-          "id": "jHf91rCtYwCQ9qVZ",
+          "id": "",
           "name": "Supabase account 2"
         }
       }
@@ -226,7 +226,7 @@
       ],
       "id": "35875f2a-631f-4dbf-84b8-35007925eea6",
       "name": "Whatsapp Verify",
-      "webhookId": "81082e21-dc10-4769-a0a1-58bb7a0fdb0d"
+      "webhookId": ""
     },
     {
       "parameters": {
@@ -254,7 +254,7 @@
       "alwaysOutputData": true,
       "credentials": {
         "supabaseApi": {
-          "id": "jHf91rCtYwCQ9qVZ",
+          "id": "",
           "name": "Supabase account 2"
         }
       }
