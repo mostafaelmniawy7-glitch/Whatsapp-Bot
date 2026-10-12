@@ -1,0 +1,466 @@
+{
+  "name": "Whatsapp Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp/webhook",
+        "options": {
+          "responseCode": {
+            "values": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -320,
+        80
+      ],
+      "id": "a5e817dd-019f-4c8c-a0e2-1cd5ee415308",
+      "name": "Whatsapp Webhook",
+      "webhookId": "ad920242-3468-483d-808d-1e3156ed3e80"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.mode'] === 'subscribe' ? $json.query['hub.challenge'] : 'Forbidden' }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        96,
+        -144
+      ],
+      "id": "ccc84685-71ad-4ee8-a879-a12b1479a2c5",
+      "name": "Verfy to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Incoming WhatsApp Cloud API webhook\nconst body = $input.first().json.body || {};\n\nconst value = body.entry?.[0]?.changes?.[0]?.value;\n\n// Delivery/read receipts and other events have no messages\nif (!value || !value.messages || !value.messages[0]) {\n  return [{ json: { skip: true, reason: 'no_message' } }];\n}\n\nconst message = value.messages[0];\nconst contact = value.contacts?.[0];\n\nconst messageType = message.type || 'text';\nlet messageText = message.text?.body || '';\nif (!messageText && messageType !== 'text') {\n  messageText = `[${messageType} message]`;\n}\n\nreturn [{\n  json: {\n    skip: false,\n    message_id: message.id,\n    phone_number: message.from,\n    sender_name: contact?.profile?.name || 'Unknown',\n    message_text: messageText,\n    message_type: messageType,\n    business_id: 'restaurant_demo'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        96
+      ],
+      "id": "0d1269b7-c160-4b75-81ff-68e72ee39aaa",
+      "name": "Parse Whatsapp Message"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b8012598-9473-431b-ae72-fe9b62eb68e1",
+              "leftValue": "={{ $json.skip ? 'skip' : 'ok' }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "ok"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        352,
+        96
+      ],
+      "id": "04afdf30-6b8d-4b03-9dae-ef0cf59a6a48",
+      "name": "Has Message"
+    },
+    {
+      "parameters": {
+        "tableId": "bot_whatsapp_messages",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "message_id",
+              "fieldValue": "={{ $('Parse Whatsapp Message').first().json.message_id }}"
+            },
+            {
+              "fieldId": "phone_number",
+              "fieldValue": "={{ $('Parse Whatsapp Message').first().json.phone_number }}"
+            },
+            {
+              "fieldId": "sender_name",
+              "fieldValue": "={{ $('Parse Whatsapp Message').first().json.sender_name }}"
+            },
+            {
+              "fieldId": "message_text",
+              "fieldValue": "={{ $('Parse Whatsapp Message').first().json.message_text }}"
+            },
+            {
+              "fieldId": "message_type",
+              "fieldValue": "={{ $('Parse Whatsapp Message').first().json.message_type }}"
+            },
+            {
+              "fieldId": "direction",
+              "fieldValue": "inbound"
+            },
+            {
+              "fieldId": "business_id",
+              "fieldValue": "={{ $('Parse Whatsapp Message').first().json.business_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1072,
+        80
+      ],
+      "id": "a22d7270-66e0-4291-bee4-e529f59429f2",
+      "name": "Save Incoming Message",
+      "credentials": {
+        "supabaseApi": {
+          "id": "jHf91rCtYwCQ9qVZ",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "# ROLE\nYou are a WhatsApp customer service assistant for a restaurant.\n\n# TASK\nAnalyze the customer's message and return ONLY valid JSON:\n\n{\n  \"intent\": \"order | question | complaint | greeting | other\",\n  \"sentiment\": \"positive | neutral | negative | angry\",\n  \"reply\": \"A friendly Arabic reply to the customer\",\n  \"needs_handoff\": true | false\n}\n\n# RULES\n- Reply in the SAME language as the customer\n- Keep replies short and friendly (max 3 sentences)\n- If it's an order, ask for details\n- If it's a question, answer based on the context\n- If angry/complaint → needs_handoff = true\n\nReturn ONLY valid JSON. No markdown."
+            },
+            {
+              "content": "=Customer message:\n{{ $('Parse Whatsapp Message').item.json.message_text }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1296,
+        80
+      ],
+      "id": "5169c206-db72-4eee-80fd-863804d77569",
+      "name": "AI Analyzer",
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nlet aiResponse = '';\nif (input.output && input.output[0] && input.output[0].content && input.output[0].content[0]) {\n  aiResponse = input.output[0].content[0].text;\n} else if (input.message && input.message.content) {\n  aiResponse = input.message.content;\n} else if (input.text) {\n  aiResponse = input.text;\n} else {\n  aiResponse = JSON.stringify(input);\n}\n\nlet parsed;\ntry {\n  const cleaned = aiResponse.replace(/```json|```/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    intent: 'other',\n    sentiment: 'neutral',\n    reply: 'مرحبا! كيف أقدر أساعدك؟',\n    needs_handoff: false\n  };\n}\n\nconst msg = $('Parse Whatsapp Message').first().json;\n\nreturn [{\n  json: {\n    ...msg,\n    intent: parsed.intent || 'other',\n    sentiment: parsed.sentiment || 'neutral',\n    ai_reply: parsed.reply || 'مرحبا! كيف أقدر أساعدك؟',\n    needs_handoff: parsed.needs_handoff === true\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        80
+      ],
+      "id": "63f3eb6f-a9de-4e81-832b-7d763162a030",
+      "name": "Parse AI Response"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/1373476395849148/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer EAAPrczf0YcwBSihYH9UJc2FZCnKHQel698XDHff9Jw5eVW0c1DXEqkJ2rwXmCraNyQmk6OWVRRplE3eE8ZA0NZArAlF45SmhP4BQTH1yZAcY6l8HcoEAJxjyaYETx73373EsPf48tWEY0TbpzwZCKU8aZCnx5fyzaxJVzTfq078lopSFgRHE2weWQRyw5JZAwXuIQZDZD"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.phone_number, type: 'text', text: { body: $json.ai_reply } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1824,
+        80
+      ],
+      "id": "a48e0635-2471-4553-99f1-5c5e271e0d14",
+      "name": "Send WhatsApp Reply"
+    },
+    {
+      "parameters": {
+        "path": "whatsapp/webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -160,
+        -144
+      ],
+      "id": "35875f2a-631f-4dbf-84b8-35007925eea6",
+      "name": "Whatsapp Verify",
+      "webhookId": "81082e21-dc10-4769-a0a1-58bb7a0fdb0d"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "bot_whatsapp_messages",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Parse Whatsapp Message').first().json.message_id }}"
+            }
+          ]
+        }
+      },
+      "id": "e49ceca9-d358-422d-bd95-ef82df8d90ac",
+      "name": "Check Message Exists",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        592,
+        80
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "jHf91rCtYwCQ9qVZ",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "5f1d7b0a-3c1e-4a56-9a0e-7a2f1b9c4d11",
+              "leftValue": "={{ Object.keys($json || {}).length > 0 ? 'exists' : 'new' }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "new"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          }
+        },
+        "options": {}
+      },
+      "id": "e78f69ff-2dd9-4726-acde-d45941e46ac4",
+      "name": "Is New Message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        832,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "path": "privacy-policy",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "66bbe9c6-45c4-4b1d-ae8c-09c999ca57d0",
+      "name": "Privacy Policy Page",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -336,
+        336
+      ],
+      "webhookId": "045e3e7c-9462-48d3-837d-0b7f778fd7d3"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Privacy Policy - WhatsApp Assistant</title><style>body{font-family:Arial,Helvetica,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;line-height:1.7;color:#222}h1{color:#1f3a5f}h2{margin-top:28px;color:#1f3a5f}</style></head><body><h1>Privacy Policy</h1><p>Last updated: October 12, 2026</p><p>This Privacy Policy explains how our WhatsApp customer service assistant (\"the Service\") collects, uses, and protects your information when you message us on WhatsApp.</p><h2>1. Information We Collect</h2><ul><li>Your WhatsApp phone number and profile name.</li><li>The content of the messages you send to us.</li><li>Message metadata such as message type and time.</li></ul><h2>2. How We Use Your Information</h2><ul><li>To read your message and reply to your questions or orders.</li><li>To improve the quality of our customer service.</li><li>To escalate your request to a human team member when needed.</li></ul><h2>3. Third-Party Services</h2><p>To provide the Service we use trusted providers: Meta (WhatsApp Business Platform) to send and receive messages, OpenAI to generate replies, Supabase to store conversation records, and n8n to automate the workflow. These providers process data only to deliver the Service.</p><h2>4. Data Sharing</h2><p>We do not sell your personal information. We share it only with the service providers listed above or when required by law.</p><h2>5. Data Retention</h2><p>We keep conversation records only as long as needed to provide the Service, then delete them or remove identifying details.</p><h2>6. Your Rights and Data Deletion</h2><p>You may request access to, correction of, or deletion of your data at any time by emailing us at the address below. We will respond within 30 days.</p><h2>7. Security</h2><p>We use reasonable technical measures to protect your data, but no method of transmission or storage is completely secure.</p><h2>8. Contact</h2><p>For any privacy questions or deletion requests: <a href=\"mailto:mostafaelmniawy7@gmail.com\">mostafaelmniawy7@gmail.com</a></p><hr><h1 dir=\"rtl\">سياسة الخصوصية</h1><p dir=\"rtl\">نجمع رقم هاتفك واسمك على واتساب ومحتوى رسائلك للرد على استفساراتك فقط، ولا نبيع بياناتك لأي جهة. يمكنك طلب حذف بياناتك في أي وقت عن طريق التواصل معنا على البريد المذكور أعلاه.</p></body></html>",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "9317257a-6119-428d-8dab-6bec01618f44",
+      "name": "Privacy Policy Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -96,
+        336
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Parse Whatsapp Message": {
+      "main": [
+        [
+          {
+            "node": "Has Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Incoming Message": {
+      "main": [
+        [
+          {
+            "node": "AI Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whatsapp Verify": {
+      "main": [
+        [
+          {
+            "node": "Verfy to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whatsapp Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Whatsapp Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Message": {
+      "main": [
+        [
+          {
+            "node": "Check Message Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Message Exists": {
+      "main": [
+        [
+          {
+            "node": "Is New Message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is New Message?": {
+      "main": [
+        [
+          {
+            "node": "Save Incoming Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Privacy Policy Page": {
+      "main": [
+        [
+          {
+            "node": "Privacy Policy Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "1940e6b5-191d-418f-b993-6aad6906c45d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "889eb8c99fb0d2b879a29fcce4101c5056807687e42e12560f9b81fcb40e6aa4"
+  },
+  "nodeGroups": [],
+  "id": "J4UDB1kIvgFyCy1Z",
+  "tags": []
+}
